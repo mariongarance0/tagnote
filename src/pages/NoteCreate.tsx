@@ -35,19 +35,19 @@ const NoteCreate = () => {
     );
   };
 
-  const handleCreateLibrary = () => {
+  const handleCreateLibrary = async () => {
     const name = newLibraryName.trim();
     if (name) {
-      const lib = addLibrary(name);
+      const lib = await addLibrary(name);
       setSelectedLibrary(lib.id);
       setNewLibraryName('');
       setShowNewLibrary(false);
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!title.trim() && !content.trim()) return;
-    addNote({
+    await addNote({
       title: title.trim() || 'Untitled',
       content: content.trim(),
       tags: selectedTags,

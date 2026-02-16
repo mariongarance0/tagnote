@@ -24,8 +24,8 @@ const NoteView = () => {
     month: 'long', day: 'numeric', year: 'numeric',
   });
 
-  const handleDelete = () => {
-    deleteNote(note.id);
+  const handleDelete = async () => {
+    await deleteNote(note.id);
     navigate(-1);
   };
 

@@ -2,7 +2,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { NotesProvider } from "@/contexts/NotesContext";
 import { AnimatePresence } from "framer-motion";
 import BottomNav from "@/components/BottomNav";
@@ -12,31 +13,51 @@ import NoteView from "./pages/NoteView";
 import Libraries from "./pages/Libraries";
 import LibraryView from "./pages/LibraryView";
 import TagsSearch from "./pages/TagsSearch";
+import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
+
+const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user, loading } = useAuth();
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+  return user ? <>{children}</> : <Navigate to="/auth" replace />;
+};
+
+const AppRoutes = () => (
+  <NotesProvider>
+    <AnimatePresence mode="wait">
+      <Routes>
+        <Route path="/auth" element={<Auth />} />
+        <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+        <Route path="/new" element={<ProtectedRoute><NoteCreate /></ProtectedRoute>} />
+        <Route path="/note/:id" element={<ProtectedRoute><NoteView /></ProtectedRoute>} />
+        <Route path="/libraries" element={<ProtectedRoute><Libraries /></ProtectedRoute>} />
+        <Route path="/library/:id" element={<ProtectedRoute><LibraryView /></ProtectedRoute>} />
+        <Route path="/search" element={<ProtectedRoute><TagsSearch /></ProtectedRoute>} />
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </AnimatePresence>
+    <BottomNav />
+  </NotesProvider>
+);
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <NotesProvider>
+      <AuthProvider>
         <BrowserRouter>
-          <AnimatePresence mode="wait">
-            <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/new" element={<NoteCreate />} />
-              <Route path="/note/:id" element={<NoteView />} />
-              <Route path="/libraries" element={<Libraries />} />
-              <Route path="/library/:id" element={<LibraryView />} />
-              <Route path="/search" element={<TagsSearch />} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </AnimatePresence>
-          <BottomNav />
+          <AppRoutes />
         </BrowserRouter>
-      </NotesProvider>
+      </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );
