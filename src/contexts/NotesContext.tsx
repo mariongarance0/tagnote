@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 export interface Note {
   id: string;
@@ -20,14 +22,15 @@ interface NotesState {
   notes: Note[];
   libraries: Library[];
   tags: string[];
+  loading: boolean;
 }
 
 interface NotesContextType extends NotesState {
-  addNote: (note: Omit<Note, 'id' | 'createdAt' | 'updatedAt'>) => Note;
-  updateNote: (id: string, updates: Partial<Omit<Note, 'id' | 'createdAt'>>) => void;
-  deleteNote: (id: string) => void;
-  addLibrary: (name: string) => Library;
-  deleteLibrary: (id: string) => void;
+  addNote: (note: Omit<Note, 'id' | 'createdAt' | 'updatedAt'>) => Promise<Note>;
+  updateNote: (id: string, updates: Partial<Omit<Note, 'id' | 'createdAt'>>) => Promise<void>;
+  deleteNote: (id: string) => Promise<void>;
+  addLibrary: (name: string) => Promise<Library>;
+  deleteLibrary: (id: string) => Promise<void>;
   addTag: (tag: string) => void;
   deleteTag: (tag: string) => void;
   getNotesForLibrary: (libraryId: string) => Note[];
@@ -38,91 +41,158 @@ interface NotesContextType extends NotesState {
 
 const NotesContext = createContext<NotesContextType | null>(null);
 
-const STORAGE_KEY = 'tagnote-data';
+const mapNote = (row: any): Note => ({
+  id: row.id,
+  title: row.title,
+  content: row.content,
+  tags: row.tags || [],
+  libraryId: row.library_id,
+  createdAt: new Date(row.created_at).getTime(),
+  updatedAt: new Date(row.updated_at).getTime(),
+});
 
-const loadState = (): NotesState => {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch {}
-  return { notes: [], libraries: [], tags: [] };
-};
-
-const saveState = (state: NotesState) => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-};
-
-const genId = () => Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
+const mapLibrary = (row: any): Library => ({
+  id: row.id,
+  name: row.name,
+  createdAt: new Date(row.created_at).getTime(),
+});
 
 export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [state, setState] = useState<NotesState>(loadState);
+  const { user } = useAuth();
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [libraries, setLibraries] = useState<Library[]>([]);
+  const [tags, setTags] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
 
+  // Derive tags from notes
+  const deriveTags = useCallback((notesList: Note[]) => {
+    const allTags = new Set<string>();
+    notesList.forEach(n => n.tags.forEach(t => allTags.add(t)));
+    setTags(Array.from(allTags));
+  }, []);
+
+  // Fetch data on user change
   useEffect(() => {
-    saveState(state);
-  }, [state]);
+    if (!user) {
+      setNotes([]);
+      setLibraries([]);
+      setTags([]);
+      setLoading(false);
+      return;
+    }
 
-  const addNote = useCallback((note: Omit<Note, 'id' | 'createdAt' | 'updatedAt'>) => {
-    const now = Date.now();
-    const newNote: Note = { ...note, id: genId(), createdAt: now, updatedAt: now };
-    setState(s => {
-      const newTags = note.tags.filter(t => !s.tags.includes(t));
-      return { ...s, notes: [newNote, ...s.notes], tags: [...s.tags, ...newTags] };
+    const fetchData = async () => {
+      setLoading(true);
+      const [notesRes, libsRes] = await Promise.all([
+        supabase.from('notes').select('*').eq('user_id', user.id).order('updated_at', { ascending: false }),
+        supabase.from('libraries').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
+      ]);
+
+      const fetchedNotes = (notesRes.data || []).map(mapNote);
+      setNotes(fetchedNotes);
+      setLibraries((libsRes.data || []).map(mapLibrary));
+      deriveTags(fetchedNotes);
+      setLoading(false);
+    };
+
+    fetchData();
+  }, [user, deriveTags]);
+
+  const addNote = useCallback(async (note: Omit<Note, 'id' | 'createdAt' | 'updatedAt'>) => {
+    const { data, error } = await supabase.from('notes').insert({
+      user_id: user!.id,
+      title: note.title,
+      content: note.content,
+      tags: note.tags,
+      library_id: note.libraryId,
+    }).select().single();
+
+    if (error) throw error;
+    const newNote = mapNote(data);
+    setNotes(prev => {
+      const updated = [newNote, ...prev];
+      deriveTags(updated);
+      return updated;
     });
     return newNote;
-  }, []);
+  }, [user, deriveTags]);
 
-  const updateNote = useCallback((id: string, updates: Partial<Omit<Note, 'id' | 'createdAt'>>) => {
-    setState(s => ({
-      ...s,
-      notes: s.notes.map(n => n.id === id ? { ...n, ...updates, updatedAt: Date.now() } : n),
-    }));
-  }, []);
+  const updateNote = useCallback(async (id: string, updates: Partial<Omit<Note, 'id' | 'createdAt'>>) => {
+    const dbUpdates: any = {};
+    if (updates.title !== undefined) dbUpdates.title = updates.title;
+    if (updates.content !== undefined) dbUpdates.content = updates.content;
+    if (updates.tags !== undefined) dbUpdates.tags = updates.tags;
+    if (updates.libraryId !== undefined) dbUpdates.library_id = updates.libraryId;
 
-  const deleteNote = useCallback((id: string) => {
-    setState(s => ({ ...s, notes: s.notes.filter(n => n.id !== id) }));
-  }, []);
+    const { data, error } = await supabase.from('notes').update(dbUpdates).eq('id', id).select().single();
+    if (error) throw error;
 
-  const addLibrary = useCallback((name: string) => {
-    const lib: Library = { id: genId(), name, createdAt: Date.now() };
-    setState(s => ({ ...s, libraries: [...s.libraries, lib] }));
+    setNotes(prev => {
+      const updated = prev.map(n => n.id === id ? mapNote(data) : n);
+      deriveTags(updated);
+      return updated;
+    });
+  }, [deriveTags]);
+
+  const deleteNote = useCallback(async (id: string) => {
+    const { error } = await supabase.from('notes').delete().eq('id', id);
+    if (error) throw error;
+    setNotes(prev => {
+      const updated = prev.filter(n => n.id !== id);
+      deriveTags(updated);
+      return updated;
+    });
+  }, [deriveTags]);
+
+  const addLibrary = useCallback(async (name: string) => {
+    const { data, error } = await supabase.from('libraries').insert({
+      user_id: user!.id,
+      name,
+    }).select().single();
+    if (error) throw error;
+    const lib = mapLibrary(data);
+    setLibraries(prev => [...prev, lib]);
     return lib;
-  }, []);
+  }, [user]);
 
-  const deleteLibrary = useCallback((id: string) => {
-    setState(s => ({
-      ...s,
-      libraries: s.libraries.filter(l => l.id !== id),
-      notes: s.notes.map(n => n.libraryId === id ? { ...n, libraryId: null } : n),
-    }));
+  const deleteLibrary = useCallback(async (id: string) => {
+    const { error } = await supabase.from('libraries').delete().eq('id', id);
+    if (error) throw error;
+    setLibraries(prev => prev.filter(l => l.id !== id));
+    // Notes with this library_id will be set to null by DB cascade
+    setNotes(prev => prev.map(n => n.libraryId === id ? { ...n, libraryId: null } : n));
   }, []);
 
   const addTag = useCallback((tag: string) => {
-    setState(s => s.tags.includes(tag) ? s : { ...s, tags: [...s.tags, tag] });
+    setTags(prev => prev.includes(tag) ? prev : [...prev, tag]);
   }, []);
 
   const deleteTag = useCallback((tag: string) => {
-    setState(s => ({
-      ...s,
-      tags: s.tags.filter(t => t !== tag),
-      notes: s.notes.map(n => ({ ...n, tags: n.tags.filter(t => t !== tag) })),
-    }));
-  }, []);
+    setTags(prev => prev.filter(t => t !== tag));
+    // Remove tag from all notes in DB
+    notes.filter(n => n.tags.includes(tag)).forEach(n => {
+      const newTags = n.tags.filter(t => t !== tag);
+      supabase.from('notes').update({ tags: newTags }).eq('id', n.id);
+    });
+    setNotes(prev => prev.map(n => ({ ...n, tags: n.tags.filter(t => t !== tag) })));
+  }, [notes]);
 
   const getNotesForLibrary = useCallback((libraryId: string) => {
-    return state.notes.filter(n => n.libraryId === libraryId);
-  }, [state.notes]);
+    return notes.filter(n => n.libraryId === libraryId);
+  }, [notes]);
 
-  const getNotesForTags = useCallback((tags: string[]) => {
-    if (tags.length === 0) return state.notes;
-    return state.notes.filter(n => tags.some(t => n.tags.includes(t)));
-  }, [state.notes]);
+  const getNotesForTags = useCallback((selectedTags: string[]) => {
+    if (selectedTags.length === 0) return notes;
+    return notes.filter(n => selectedTags.some(t => n.tags.includes(t)));
+  }, [notes]);
 
-  const getNoteById = useCallback((id: string) => state.notes.find(n => n.id === id), [state.notes]);
-  const getLibraryById = useCallback((id: string) => state.libraries.find(l => l.id === id), [state.libraries]);
+  const getNoteById = useCallback((id: string) => notes.find(n => n.id === id), [notes]);
+  const getLibraryById = useCallback((id: string) => libraries.find(l => l.id === id), [libraries]);
 
   return (
     <NotesContext.Provider value={{
-      ...state, addNote, updateNote, deleteNote, addLibrary, deleteLibrary,
+      notes, libraries, tags, loading,
+      addNote, updateNote, deleteNote, addLibrary, deleteLibrary,
       addTag, deleteTag, getNotesForLibrary, getNotesForTags, getNoteById, getLibraryById,
     }}>
       {children}

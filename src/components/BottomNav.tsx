@@ -13,7 +13,7 @@ const BottomNav = () => {
   const navigate = useNavigate();
 
   // Hide on note creation/view pages
-  const hiddenPaths = ['/new', '/note/'];
+  const hiddenPaths = ['/new', '/note/', '/auth'];
   if (hiddenPaths.some(p => location.pathname.startsWith(p))) return null;
 
   return (
