@@ -8,6 +8,7 @@ const TagsSearch = () => {
   const { notes, tags } = useNotes();
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [query, setQuery] = useState('');
+  const [matchMode, setMatchMode] = useState<'any' | 'all'>('any');
 
   const toggleTag = (tag: string) => {
     setSelectedTags(prev =>
@@ -18,7 +19,11 @@ const TagsSearch = () => {
   const filtered = useMemo(() => {
     let result = notes;
     if (selectedTags.length > 0) {
-      result = result.filter(n => selectedTags.some(t => n.tags.includes(t)));
+      result = result.filter(n =>
+        matchMode === 'any'
+          ? selectedTags.some(t => n.tags.includes(t))
+          : selectedTags.every(t => n.tags.includes(t))
+      );
     }
     if (query.trim()) {
       const q = query.toLowerCase();
@@ -27,7 +32,7 @@ const TagsSearch = () => {
       );
     }
     return result.sort((a, b) => b.updatedAt - a.updatedAt);
-  }, [notes, selectedTags, query]);
+  }, [notes, selectedTags, query, matchMode]);
 
   return (
     <PageTransition>
@@ -49,9 +54,31 @@ const TagsSearch = () => {
         {/* Tag Filters */}
         {tags.length > 0 && (
           <div className="mb-6">
-            <h2 className="text-[13px] font-semibold text-muted-foreground uppercase tracking-wider mb-2.5">
-              Filter by Tags
-            </h2>
+            <div className="flex items-center justify-between mb-2.5">
+              <h2 className="text-[13px] font-semibold text-muted-foreground uppercase tracking-wider">
+                Filter by Tags
+              </h2>
+              {selectedTags.length > 1 && (
+                <div className="flex items-center gap-1 bg-secondary rounded-full p-0.5">
+                  <button
+                    onClick={() => setMatchMode('any')}
+                    className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${
+                      matchMode === 'any' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'
+                    }`}
+                  >
+                    Any
+                  </button>
+                  <button
+                    onClick={() => setMatchMode('all')}
+                    className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${
+                      matchMode === 'all' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'
+                    }`}
+                  >
+                    All
+                  </button>
+                </div>
+              )}
+            </div>
             <div className="flex flex-wrap gap-2">
               {tags.map(tag => (
                 <button
