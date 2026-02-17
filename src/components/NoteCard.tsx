@@ -1,6 +1,7 @@
 import { Note } from '@/contexts/NotesContext';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { getTagStyle } from '@/lib/tagColor';
 
 interface NoteCardProps {
   note: Note;
@@ -34,7 +35,7 @@ const NoteCard = ({ note, index = 0 }: NoteCardProps) => {
       {note.tags.length > 0 && (
         <div className="flex gap-1.5 mt-2.5 flex-wrap">
           {note.tags.slice(0, 3).map(tag => (
-            <span key={tag} className="text-[11px] px-2 py-0.5 rounded-full bg-tag-bg text-tag-foreground font-medium">
+            <span key={tag} className="text-[11px] px-2 py-0.5 rounded-full font-medium" style={getTagStyle(tag)}>
               {tag}
             </span>
           ))}

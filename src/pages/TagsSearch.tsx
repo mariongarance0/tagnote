@@ -3,6 +3,7 @@ import { useNotes } from '@/contexts/NotesContext';
 import NoteCard from '@/components/NoteCard';
 import PageTransition from '@/components/PageTransition';
 import { Search as SearchIcon } from 'lucide-react';
+import { getTagStyle } from '@/lib/tagColor';
 
 const TagsSearch = () => {
   const { notes, tags } = useNotes();
@@ -84,10 +85,9 @@ const TagsSearch = () => {
                 <button
                   key={tag}
                   onClick={() => toggleTag(tag)}
+                  style={getTagStyle(tag)}
                   className={`px-3 py-1.5 rounded-full text-[13px] font-medium transition-all active:scale-95 ${
-                    selectedTags.includes(tag)
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-tag-bg text-tag-foreground'
+                    selectedTags.includes(tag) ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''
                   }`}
                 >
                   {tag}

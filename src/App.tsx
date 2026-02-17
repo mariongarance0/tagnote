@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { NotesProvider } from "@/contexts/NotesContext";
+import { TodosProvider } from "@/contexts/TodosContext";
 import { AnimatePresence } from "framer-motion";
 import BottomNav from "@/components/BottomNav";
 import Dashboard from "./pages/Dashboard";
@@ -13,6 +14,7 @@ import NoteView from "./pages/NoteView";
 import Libraries from "./pages/Libraries";
 import LibraryView from "./pages/LibraryView";
 import TagsSearch from "./pages/TagsSearch";
+import TodoList from "./pages/TodoList";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
@@ -32,19 +34,22 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 
 const AppRoutes = () => (
   <NotesProvider>
-    <AnimatePresence mode="wait">
-      <Routes>
-        <Route path="/auth" element={<Auth />} />
-        <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-        <Route path="/new" element={<ProtectedRoute><NoteCreate /></ProtectedRoute>} />
-        <Route path="/note/:id" element={<ProtectedRoute><NoteView /></ProtectedRoute>} />
-        <Route path="/libraries" element={<ProtectedRoute><Libraries /></ProtectedRoute>} />
-        <Route path="/library/:id" element={<ProtectedRoute><LibraryView /></ProtectedRoute>} />
-        <Route path="/search" element={<ProtectedRoute><TagsSearch /></ProtectedRoute>} />
-        <Route path="*" element={<NotFound />} />
-      </Routes>
-    </AnimatePresence>
-    <BottomNav />
+    <TodosProvider>
+      <AnimatePresence mode="wait">
+        <Routes>
+          <Route path="/auth" element={<Auth />} />
+          <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+          <Route path="/new" element={<ProtectedRoute><NoteCreate /></ProtectedRoute>} />
+          <Route path="/note/:id" element={<ProtectedRoute><NoteView /></ProtectedRoute>} />
+          <Route path="/libraries" element={<ProtectedRoute><Libraries /></ProtectedRoute>} />
+          <Route path="/library/:id" element={<ProtectedRoute><LibraryView /></ProtectedRoute>} />
+          <Route path="/search" element={<ProtectedRoute><TagsSearch /></ProtectedRoute>} />
+          <Route path="/todo" element={<ProtectedRoute><TodoList /></ProtectedRoute>} />
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </AnimatePresence>
+      <BottomNav />
+    </TodosProvider>
   </NotesProvider>
 );
 

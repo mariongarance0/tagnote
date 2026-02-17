@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, X, Plus, Check } from 'lucide-react';
 import PageTransition from '@/components/PageTransition';
 import { motion, AnimatePresence } from 'framer-motion';
+import { getTagStyle } from '@/lib/tagColor';
 
 const NoteCreate = () => {
   const { addNote, libraries, tags, addLibrary, getChildLibraries, getLibraryById, getLibraryDepth } = useNotes();
@@ -124,10 +125,11 @@ const NoteCreate = () => {
                       initial={{ scale: 0.8, opacity: 0 }}
                       animate={{ scale: 1, opacity: 1 }}
                       exit={{ scale: 0.8, opacity: 0 }}
-                      className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-primary text-primary-foreground text-[13px] font-medium"
+                      className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[13px] font-medium"
+                      style={getTagStyle(tag)}
                     >
-                      {tag}
-                      <button onClick={() => handleRemoveTag(tag)} className="ml-0.5">
+                      <span className="opacity-90">{tag}</span>
+                      <button onClick={() => handleRemoveTag(tag)} className="ml-0.5 opacity-80 hover:opacity-100">
                         <X size={12} />
                       </button>
                     </motion.span>
@@ -143,7 +145,8 @@ const NoteCreate = () => {
                   <button
                     key={tag}
                     onClick={() => toggleExistingTag(tag)}
-                    className="px-3 py-1 rounded-full bg-tag-bg text-tag-foreground text-[13px] font-medium active:scale-95 transition-transform"
+                    className="px-3 py-1 rounded-full text-[13px] font-medium active:scale-95 transition-transform"
+                    style={getTagStyle(tag)}
                   >
                     {tag}
                   </button>

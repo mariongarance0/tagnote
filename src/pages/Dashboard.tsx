@@ -14,11 +14,18 @@ const Dashboard = () => {
     <PageTransition>
       <div className="safe-bottom px-5 pt-14 pb-6 max-w-lg mx-auto">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-[28px] font-bold tracking-tight text-foreground">TagNote</h1>
-          <p className="text-muted-foreground text-[15px] mt-0.5">
+        <div className="mb-8 flex items-center gap-3">
+          <img
+            src="/monkey_no_background.png"
+            alt="TagNote"
+            className="h-10 w-auto object-contain shrink-0"
+          />
+          <div>
+            <h1 className="text-[28px] font-bold tracking-tight text-foreground">TagNote</h1>
+            <p className="text-muted-foreground text-[15px] mt-0.5">
             {notes.length === 0 ? 'Start capturing your thoughts' : `${notes.length} note${notes.length !== 1 ? 's' : ''}`}
-          </p>
+            </p>
+          </div>
         </div>
 
         {/* New Note Button */}

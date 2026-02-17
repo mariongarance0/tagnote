@@ -1,11 +1,12 @@
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Home, BookOpen, Search } from 'lucide-react';
+import { Home, BookOpen, Search, ListTodo } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const tabs = [
   { path: '/', icon: Home, label: 'Home' },
   { path: '/libraries', icon: BookOpen, label: 'Libraries' },
   { path: '/search', icon: Search, label: 'Search' },
+  { path: '/todo', icon: ListTodo, label: 'To do' },
 ];
 
 const BottomNav = () => {
