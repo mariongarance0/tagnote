@@ -19,21 +19,32 @@ export type Database = {
           created_at: string
           id: string
           name: string
+          parent_id: string | null
           user_id: string
         }
         Insert: {
           created_at?: string
           id?: string
           name: string
+          parent_id?: string | null
           user_id: string
         }
         Update: {
           created_at?: string
           id?: string
           name?: string
+          parent_id?: string | null
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "libraries_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "libraries"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       notes: {
         Row: {
