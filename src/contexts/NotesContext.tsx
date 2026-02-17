@@ -15,6 +15,7 @@ export interface Note {
 export interface Library {
   id: string;
   name: string;
+  parentId: string | null;
   createdAt: number;
 }
 
@@ -29,14 +30,17 @@ interface NotesContextType extends NotesState {
   addNote: (note: Omit<Note, 'id' | 'createdAt' | 'updatedAt'>) => Promise<Note>;
   updateNote: (id: string, updates: Partial<Omit<Note, 'id' | 'createdAt'>>) => Promise<void>;
   deleteNote: (id: string) => Promise<void>;
-  addLibrary: (name: string) => Promise<Library>;
+  addLibrary: (name: string, parentId?: string | null) => Promise<Library>;
   deleteLibrary: (id: string) => Promise<void>;
   addTag: (tag: string) => void;
   deleteTag: (tag: string) => void;
   getNotesForLibrary: (libraryId: string) => Note[];
+  getChildLibraries: (parentId: string | null) => Library[];
+  getLibraryDepth: (libraryId: string) => number;
   getNotesForTags: (tags: string[]) => Note[];
   getNoteById: (id: string) => Note | undefined;
   getLibraryById: (id: string) => Library | undefined;
+  getLibraryPath: (libraryId: string) => Library[];
 }
 
 const NotesContext = createContext<NotesContextType | null>(null);
@@ -54,6 +58,7 @@ const mapNote = (row: any): Note => ({
 const mapLibrary = (row: any): Library => ({
   id: row.id,
   name: row.name,
+  parentId: row.parent_id,
   createdAt: new Date(row.created_at).getTime(),
 });
 
@@ -144,10 +149,11 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     });
   }, [deriveTags]);
 
-  const addLibrary = useCallback(async (name: string) => {
+  const addLibrary = useCallback(async (name: string, parentId?: string | null) => {
     const { data, error } = await supabase.from('libraries').insert({
       user_id: user!.id,
       name,
+      parent_id: parentId || null,
     }).select().single();
     if (error) throw error;
     const lib = mapLibrary(data);
@@ -181,6 +187,30 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return notes.filter(n => n.libraryId === libraryId);
   }, [notes]);
 
+  const getChildLibraries = useCallback((parentId: string | null) => {
+    return libraries.filter(l => l.parentId === parentId);
+  }, [libraries]);
+
+  const getLibraryDepth = useCallback((libraryId: string) => {
+    let depth = 1;
+    let current = libraries.find(l => l.id === libraryId);
+    while (current?.parentId) {
+      depth++;
+      current = libraries.find(l => l.id === current!.parentId);
+    }
+    return depth;
+  }, [libraries]);
+
+  const getLibraryPath = useCallback((libraryId: string) => {
+    const path: Library[] = [];
+    let current = libraries.find(l => l.id === libraryId);
+    while (current) {
+      path.unshift(current);
+      current = current.parentId ? libraries.find(l => l.id === current!.parentId) : undefined;
+    }
+    return path;
+  }, [libraries]);
+
   const getNotesForTags = useCallback((selectedTags: string[]) => {
     if (selectedTags.length === 0) return notes;
     return notes.filter(n => selectedTags.some(t => n.tags.includes(t)));
@@ -193,7 +223,7 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     <NotesContext.Provider value={{
       notes, libraries, tags, loading,
       addNote, updateNote, deleteNote, addLibrary, deleteLibrary,
-      addTag, deleteTag, getNotesForLibrary, getNotesForTags, getNoteById, getLibraryById,
+      addTag, deleteTag, getNotesForLibrary, getChildLibraries, getLibraryDepth, getNotesForTags, getNoteById, getLibraryById, getLibraryPath,
     }}>
       {children}
     </NotesContext.Provider>

@@ -6,7 +6,7 @@ import PageTransition from '@/components/PageTransition';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const NoteCreate = () => {
-  const { addNote, libraries, tags, addLibrary } = useNotes();
+  const { addNote, libraries, tags, addLibrary, getChildLibraries, getLibraryById, getLibraryDepth } = useNotes();
   const navigate = useNavigate();
 
   const [title, setTitle] = useState('');
@@ -38,12 +38,29 @@ const NoteCreate = () => {
   const handleCreateLibrary = async () => {
     const name = newLibraryName.trim();
     if (name) {
-      const lib = await addLibrary(name);
+      const parentId = selectedLibrary;
+      const lib = await addLibrary(name, parentId);
       setSelectedLibrary(lib.id);
       setNewLibraryName('');
       setShowNewLibrary(false);
     }
   };
+
+  // Build the breadcrumb path for the selected library
+  const getSelectedPath = () => {
+    if (!selectedLibrary) return [];
+    const path: { id: string; name: string }[] = [];
+    let current = getLibraryById(selectedLibrary);
+    while (current) {
+      path.unshift(current);
+      current = current.parentId ? getLibraryById(current.parentId) : undefined;
+    }
+    return path;
+  };
+
+  const selectedPath = getSelectedPath();
+  const currentChildren = getChildLibraries(selectedLibrary);
+  const canCreateSub = !selectedLibrary || getLibraryDepth(selectedLibrary) < 4;
 
   const handleSave = async () => {
     if (!title.trim() && !content.trim()) return;
@@ -158,36 +175,77 @@ const NoteCreate = () => {
           <div>
             <h3 className="text-[13px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">Library</h3>
 
+            {/* Breadcrumb path */}
+            {selectedPath.length > 0 && (
+              <div className="flex items-center gap-1 mb-3 overflow-x-auto text-[12px]">
+                <button onClick={() => setSelectedLibrary(null)} className="text-muted-foreground whitespace-nowrap">
+                  Root
+                </button>
+                {selectedPath.map(bc => (
+                  <span key={bc.id} className="flex items-center gap-1 whitespace-nowrap">
+                    <span className="text-muted-foreground">/</span>
+                    <button
+                      onClick={() => setSelectedLibrary(bc.id)}
+                      className={bc.id === selectedLibrary ? 'text-foreground font-medium' : 'text-muted-foreground'}
+                    >
+                      {bc.name}
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
             <div className="flex flex-wrap gap-2 mb-3">
-              <button
-                onClick={() => setSelectedLibrary(null)}
-                className={`px-3.5 py-1.5 rounded-full text-[13px] font-medium transition-all ${
-                  selectedLibrary === null
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-tag-bg text-tag-foreground'
-                }`}
-              >
-                None
-              </button>
-              {libraries.map(lib => (
+              {/* Go up / None button */}
+              {selectedLibrary ? (
+                <button
+                  onClick={() => {
+                    const current = getLibraryById(selectedLibrary);
+                    setSelectedLibrary(current?.parentId ?? null);
+                  }}
+                  className="px-3.5 py-1.5 rounded-full text-[13px] font-medium bg-tag-bg text-tag-foreground"
+                >
+                  ← Up
+                </button>
+              ) : (
+                <button
+                  onClick={() => setSelectedLibrary(null)}
+                  className="px-3.5 py-1.5 rounded-full text-[13px] font-medium bg-primary text-primary-foreground"
+                >
+                  None
+                </button>
+              )}
+
+              {/* Show children of the currently selected library (or root) */}
+              {currentChildren.map(lib => (
                 <button
                   key={lib.id}
                   onClick={() => setSelectedLibrary(lib.id)}
-                  className={`px-3.5 py-1.5 rounded-full text-[13px] font-medium transition-all ${
-                    selectedLibrary === lib.id
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-tag-bg text-tag-foreground'
-                  }`}
+                  className="px-3.5 py-1.5 rounded-full text-[13px] font-medium bg-tag-bg text-tag-foreground"
                 >
                   {lib.name}
                 </button>
               ))}
-              <button
-                onClick={() => setShowNewLibrary(true)}
-                className="px-3.5 py-1.5 rounded-full text-[13px] font-medium bg-tag-bg text-tag-foreground flex items-center gap-1"
-              >
-                <Plus size={14} /> New
-              </button>
+
+              {/* If no library selected, also show root libraries */}
+              {!selectedLibrary && getChildLibraries(null).map(lib => (
+                <button
+                  key={lib.id}
+                  onClick={() => setSelectedLibrary(lib.id)}
+                  className="px-3.5 py-1.5 rounded-full text-[13px] font-medium bg-tag-bg text-tag-foreground"
+                >
+                  {lib.name}
+                </button>
+              ))}
+
+              {canCreateSub && (
+                <button
+                  onClick={() => setShowNewLibrary(true)}
+                  className="px-3.5 py-1.5 rounded-full text-[13px] font-medium bg-tag-bg text-tag-foreground flex items-center gap-1"
+                >
+                  <Plus size={14} /> New
+                </button>
+              )}
             </div>
 
             <AnimatePresence>
@@ -200,7 +258,7 @@ const NoteCreate = () => {
                 >
                   <input
                     type="text"
-                    placeholder="Library name..."
+                    placeholder={selectedLibrary ? "Sub-library name..." : "Library name..."}
                     value={newLibraryName}
                     onChange={e => setNewLibraryName(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && handleCreateLibrary()}
