@@ -51,7 +51,7 @@ const Auth = () => {
             <img
               src="/monkey_no_background.png"
               alt="TagNote"
-              className="mx-auto h-14 w-auto object-contain mb-4"
+              className="mx-auto h-28 w-auto object-contain mb-4"
             />
             <h1 className="text-[28px] font-bold tracking-tight text-foreground">TagNote</h1>
             <p className="text-muted-foreground text-[15px] mt-1">

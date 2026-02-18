@@ -2,11 +2,22 @@ import { useState, useMemo } from 'react';
 import { useNotes } from '@/contexts/NotesContext';
 import NoteCard from '@/components/NoteCard';
 import PageTransition from '@/components/PageTransition';
-import { Search as SearchIcon } from 'lucide-react';
+import { Search as SearchIcon, Trash2 } from 'lucide-react';
 import { getTagStyle } from '@/lib/tagColor';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 const TagsSearch = () => {
-  const { notes, tags } = useNotes();
+  const { notes, tags, deleteTag } = useNotes();
+  const [tagToDelete, setTagToDelete] = useState<string | null>(null);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [query, setQuery] = useState('');
   const [matchMode, setMatchMode] = useState<'any' | 'all'>('any');
@@ -82,18 +93,45 @@ const TagsSearch = () => {
             </div>
             <div className="flex flex-wrap gap-2">
               {tags.map(tag => (
-                <button
-                  key={tag}
-                  onClick={() => toggleTag(tag)}
-                  style={getTagStyle(tag)}
-                  className={`px-3 py-1.5 rounded-full text-[13px] font-medium transition-all active:scale-95 ${
-                    selectedTags.includes(tag) ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''
-                  }`}
-                >
-                  {tag}
-                </button>
+                <div key={tag} className="relative group">
+                  <button
+                    onClick={() => toggleTag(tag)}
+                    style={getTagStyle(tag)}
+                    className={`pl-3 pr-7 py-1.5 rounded-full text-[13px] font-medium transition-all active:scale-95 ${
+                      selectedTags.includes(tag) ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''
+                    }`}
+                  >
+                    {tag}
+                  </button>
+                  <button
+                    onClick={e => { e.stopPropagation(); setTagToDelete(tag); }}
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 w-4 h-4 flex items-center justify-center rounded-full opacity-0 group-hover:opacity-100 hover:bg-black/10 transition-opacity"
+                  >
+                    <Trash2 size={10} />
+                  </button>
+                </div>
               ))}
             </div>
+
+            <AlertDialog open={!!tagToDelete} onOpenChange={open => !open && setTagToDelete(null)}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete tag "{tagToDelete}"?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will remove the tag from all notes, but the notes themselves won't be deleted.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => { if (tagToDelete) { deleteTag(tagToDelete); setTagToDelete(null); setSelectedTags(prev => prev.filter(t => t !== tagToDelete)); } }}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    Delete tag
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
         )}
 
