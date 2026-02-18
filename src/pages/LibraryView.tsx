@@ -1,18 +1,29 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useNotes } from '@/contexts/NotesContext';
-import { ArrowLeft, Plus, Check, ChevronRight, BookOpen, FolderOpen } from 'lucide-react';
+import { ArrowLeft, Plus, Check, ChevronRight, BookOpen, FolderOpen, Trash2 } from 'lucide-react';
 import NoteCard from '@/components/NoteCard';
 import PageTransition from '@/components/PageTransition';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState } from 'react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 const LibraryView = () => {
   const { id } = useParams<{ id: string }>();
-  const { getLibraryById, getNotesForLibrary, getChildLibraries, getLibraryDepth, getLibraryPath, addLibrary } = useNotes();
+  const { getLibraryById, getNotesForLibrary, getChildLibraries, getLibraryDepth, getLibraryPath, addLibrary, deleteLibrary } = useNotes();
   const navigate = useNavigate();
 
   const [showNewSub, setShowNewSub] = useState(false);
   const [newSubName, setNewSubName] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const library = id ? getLibraryById(id) : undefined;
   const notes = id ? getNotesForLibrary(id) : [];
@@ -56,6 +67,9 @@ const LibraryView = () => {
                 {children.length > 0 && ` · ${children.length} sub-librar${children.length !== 1 ? 'ies' : 'y'}`}
               </p>
             </div>
+            <button onClick={() => setConfirmDelete(true)} className="p-1.5 rounded-lg active:opacity-60 text-muted-foreground hover:text-destructive transition-colors">
+              <Trash2 size={18} />
+            </button>
           </div>
           {/* Breadcrumbs */}
           {breadcrumbs.length > 1 && (
@@ -170,6 +184,26 @@ const LibraryView = () => {
           ) : null}
         </div>
       </div>
+
+      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete "{library.name}"?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete this library and all notes inside it. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => { await deleteLibrary(id!); navigate(-1); }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete library
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </PageTransition>
   );
 };
