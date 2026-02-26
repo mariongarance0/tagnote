@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNotes } from '@/contexts/NotesContext';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, X, Plus, Check } from 'lucide-react';
+import { ArrowLeft, X, Plus, Check, Cloud, CloudOff } from 'lucide-react';
 import PageTransition from '@/components/PageTransition';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getTagStyle } from '@/lib/tagColor';
+import { isOnline } from '@/lib/offlineStorage';
 
 const NoteCreate = () => {
   const { addNote, libraries, tags, addLibrary, getChildLibraries, getLibraryById, getLibraryDepth } = useNotes();
@@ -17,6 +18,56 @@ const NoteCreate = () => {
   const [selectedLibrary, setSelectedLibrary] = useState<string | null>(null);
   const [newLibraryName, setNewLibraryName] = useState('');
   const [showNewLibrary, setShowNewLibrary] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'offline'>('idle');
+  const savedNoteIdRef = useRef<string | null>(null);
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Auto-save: create or update after debounce
+  const autoSave = useCallback(async () => {
+    if (!title.trim() && !content.trim()) return;
+
+    setSaveStatus('saving');
+    try {
+      if (!savedNoteIdRef.current) {
+        // First save — create
+        const note = await addNote({
+          title: title.trim() || 'Untitled',
+          content: content.trim(),
+          tags: selectedTags,
+          libraryId: selectedLibrary,
+        });
+        savedNoteIdRef.current = note.id;
+      } else {
+        // Update existing
+        const { updateNote } = useNotesRef.current;
+        await updateNote(savedNoteIdRef.current, {
+          title: title.trim() || 'Untitled',
+          content: content.trim(),
+          tags: selectedTags,
+          libraryId: selectedLibrary,
+        });
+      }
+      setSaveStatus(isOnline() ? 'saved' : 'offline');
+      setSaved(true);
+    } catch {
+      setSaveStatus('idle');
+    }
+  }, [title, content, selectedTags, selectedLibrary, addNote]);
+
+  // We need updateNote via a ref to avoid circular deps
+  const { updateNote } = useNotes();
+  const useNotesRef = useRef({ updateNote });
+  useEffect(() => { useNotesRef.current = { updateNote }; }, [updateNote]);
+
+  // Trigger debounced auto-save on content changes
+  useEffect(() => {
+    if (!title.trim() && !content.trim()) return;
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    setSaveStatus('idle');
+    autoSaveTimerRef.current = setTimeout(() => { autoSave(); }, 1500);
+    return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
+  }, [title, content, selectedTags, selectedLibrary, autoSave]);
 
   const handleAddTag = () => {
     const tag = newTag.trim();
@@ -47,7 +98,6 @@ const NoteCreate = () => {
     }
   };
 
-  // Build the breadcrumb path for the selected library
   const getSelectedPath = () => {
     if (!selectedLibrary) return [];
     const path: { id: string; name: string }[] = [];
@@ -63,14 +113,12 @@ const NoteCreate = () => {
   const currentChildren = getChildLibraries(selectedLibrary);
   const canCreateSub = !selectedLibrary || getLibraryDepth(selectedLibrary) < 4;
 
-  const handleSave = async () => {
-    if (!title.trim() && !content.trim()) return;
-    await addNote({
-      title: title.trim() || 'Untitled',
-      content: content.trim(),
-      tags: selectedTags,
-      libraryId: selectedLibrary,
-    });
+  const handleBack = () => {
+    // Force save before leaving if needed
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+      autoSave();
+    }
     navigate(-1);
   };
 
@@ -79,17 +127,25 @@ const NoteCreate = () => {
       <div className="min-h-screen max-w-lg mx-auto">
         {/* Header */}
         <div className="sticky top-0 z-10 glass-surface bg-background/90 px-4 py-3 flex items-center justify-between border-b border-border">
-          <button onClick={() => navigate(-1)} className="p-1 -ml-1 active:opacity-60">
+          <button onClick={handleBack} className="p-1 -ml-1 active:opacity-60">
             <ArrowLeft size={22} className="text-foreground" />
           </button>
           <h2 className="text-[15px] font-semibold text-foreground">New Note</h2>
-          <motion.button
-            whileTap={{ scale: 0.92 }}
-            onClick={handleSave}
-            className="bg-primary text-primary-foreground text-[13px] font-semibold px-4 py-1.5 rounded-full active:opacity-80"
-          >
-            Save
-          </motion.button>
+          <div className="flex items-center gap-1.5 text-muted-foreground">
+            {saveStatus === 'saving' && (
+              <span className="text-[12px] text-muted-foreground animate-pulse">Saving…</span>
+            )}
+            {saveStatus === 'saved' && (
+              <span className="flex items-center gap-1 text-[12px] text-primary">
+                <Cloud size={14} /> Saved
+              </span>
+            )}
+            {saveStatus === 'offline' && (
+              <span className="flex items-center gap-1 text-[12px] text-amber-500">
+                <CloudOff size={14} /> Offline
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="px-5 pt-5 pb-12 space-y-6">
@@ -114,8 +170,6 @@ const NoteCreate = () => {
           {/* Tags Section */}
           <div>
             <h3 className="text-[13px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">Tags</h3>
-
-            {/* Selected Tags */}
             <AnimatePresence>
               {selectedTags.length > 0 && (
                 <div className="flex flex-wrap gap-2 mb-3">
@@ -137,8 +191,6 @@ const NoteCreate = () => {
                 </div>
               )}
             </AnimatePresence>
-
-            {/* Existing Tags */}
             {tags.length > 0 && (
               <div className="flex flex-wrap gap-2 mb-3">
                 {tags.filter(t => !selectedTags.includes(t)).map(tag => (
@@ -153,8 +205,6 @@ const NoteCreate = () => {
                 ))}
               </div>
             )}
-
-            {/* New Tag Input */}
             <div className="flex gap-2">
               <input
                 type="text"
@@ -177,13 +227,9 @@ const NoteCreate = () => {
           {/* Library Section */}
           <div>
             <h3 className="text-[13px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">Library</h3>
-
-            {/* Breadcrumb path */}
             {selectedPath.length > 0 && (
               <div className="flex items-center gap-1 mb-3 overflow-x-auto text-[12px]">
-                <button onClick={() => setSelectedLibrary(null)} className="text-muted-foreground whitespace-nowrap">
-                  Root
-                </button>
+                <button onClick={() => setSelectedLibrary(null)} className="text-muted-foreground whitespace-nowrap">Root</button>
                 {selectedPath.map(bc => (
                   <span key={bc.id} className="flex items-center gap-1 whitespace-nowrap">
                     <span className="text-muted-foreground">/</span>
@@ -197,9 +243,7 @@ const NoteCreate = () => {
                 ))}
               </div>
             )}
-
             <div className="flex flex-wrap gap-2 mb-3">
-              {/* Go up / None button */}
               {selectedLibrary ? (
                 <button
                   onClick={() => {
@@ -218,8 +262,6 @@ const NoteCreate = () => {
                   None
                 </button>
               )}
-
-              {/* Show children of the currently selected library (or root) */}
               {currentChildren.map(lib => (
                 <button
                   key={lib.id}
@@ -229,8 +271,6 @@ const NoteCreate = () => {
                   {lib.name}
                 </button>
               ))}
-
-              {/* If no library selected, also show root libraries */}
               {!selectedLibrary && getChildLibraries(null).map(lib => (
                 <button
                   key={lib.id}
@@ -240,7 +280,6 @@ const NoteCreate = () => {
                   {lib.name}
                 </button>
               ))}
-
               {canCreateSub && (
                 <button
                   onClick={() => setShowNewLibrary(true)}
@@ -250,7 +289,6 @@ const NoteCreate = () => {
                 </button>
               )}
             </div>
-
             <AnimatePresence>
               {showNewLibrary && (
                 <motion.div
