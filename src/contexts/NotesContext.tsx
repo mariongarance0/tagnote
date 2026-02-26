@@ -1,6 +1,11 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import {
+  cacheNotes, cacheLibraries, getCachedNotes, getCachedLibraries,
+  getPendingActions, addPendingAction, removePendingAction, clearPendingActions, isOnline,
+} from '@/lib/offlineStorage';
+import { toast } from 'sonner';
 
 export interface Note {
   id: string;
@@ -68,42 +73,141 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [libraries, setLibraries] = useState<Library[]>([]);
   const [tags, setTags] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const syncingRef = useRef(false);
 
-  // Derive tags from notes
   const deriveTags = useCallback((notesList: Note[]) => {
     const allTags = new Set<string>();
     notesList.forEach(n => n.tags.forEach(t => allTags.add(t)));
     setTags(Array.from(allTags));
   }, []);
 
+  // Sync pending actions when coming back online
+  const syncPendingActions = useCallback(async () => {
+    if (syncingRef.current || !user) return;
+    const pending = getPendingActions();
+    if (pending.length === 0) return;
+
+    syncingRef.current = true;
+    let synced = 0;
+
+    for (const action of pending) {
+      try {
+        if (action.type === 'create_note') {
+          const { error } = await supabase.from('notes').insert({
+            id: action.payload.id,
+            user_id: user.id,
+            title: action.payload.title,
+            content: action.payload.content,
+            tags: action.payload.tags,
+            library_id: action.payload.libraryId,
+          });
+          if (!error) { removePendingAction(action.id); synced++; }
+        } else if (action.type === 'update_note') {
+          const dbUpdates: any = {};
+          if (action.payload.title !== undefined) dbUpdates.title = action.payload.title;
+          if (action.payload.content !== undefined) dbUpdates.content = action.payload.content;
+          if (action.payload.tags !== undefined) dbUpdates.tags = action.payload.tags;
+          if (action.payload.libraryId !== undefined) dbUpdates.library_id = action.payload.libraryId;
+          const { error } = await supabase.from('notes').update(dbUpdates).eq('id', action.payload.id);
+          if (!error) { removePendingAction(action.id); synced++; }
+        } else if (action.type === 'delete_note') {
+          const { error } = await supabase.from('notes').delete().eq('id', action.payload.id);
+          if (!error) { removePendingAction(action.id); synced++; }
+        }
+      } catch {}
+    }
+
+    if (synced > 0) {
+      toast.success(`Synced ${synced} offline change${synced > 1 ? 's' : ''}`);
+      // Refetch fresh data
+      const [notesRes, libsRes] = await Promise.all([
+        supabase.from('notes').select('*').eq('user_id', user.id).order('updated_at', { ascending: false }),
+        supabase.from('libraries').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
+      ]);
+      const freshNotes = (notesRes.data || []).map(mapNote);
+      setNotes(freshNotes);
+      cacheNotes(freshNotes);
+      const freshLibs = (libsRes.data || []).map(mapLibrary);
+      setLibraries(freshLibs);
+      cacheLibraries(freshLibs);
+      deriveTags(freshNotes);
+    }
+    syncingRef.current = false;
+  }, [user, deriveTags]);
+
+  // Listen for online/offline events
+  useEffect(() => {
+    const handleOnline = () => { syncPendingActions(); };
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [syncPendingActions]);
+
   // Fetch data on user change
   useEffect(() => {
     if (!user) {
-      setNotes([]);
-      setLibraries([]);
-      setTags([]);
-      setLoading(false);
+      setNotes([]); setLibraries([]); setTags([]); setLoading(false);
       return;
     }
 
     const fetchData = async () => {
       setLoading(true);
+
+      if (!isOnline()) {
+        // Load from cache
+        const cachedN = getCachedNotes();
+        const cachedL = getCachedLibraries();
+        setNotes(cachedN);
+        setLibraries(cachedL);
+        deriveTags(cachedN);
+        setLoading(false);
+        return;
+      }
+
       const [notesRes, libsRes] = await Promise.all([
         supabase.from('notes').select('*').eq('user_id', user.id).order('updated_at', { ascending: false }),
         supabase.from('libraries').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
       ]);
 
       const fetchedNotes = (notesRes.data || []).map(mapNote);
+      const fetchedLibs = (libsRes.data || []).map(mapLibrary);
       setNotes(fetchedNotes);
-      setLibraries((libsRes.data || []).map(mapLibrary));
+      setLibraries(fetchedLibs);
       deriveTags(fetchedNotes);
+      cacheNotes(fetchedNotes);
+      cacheLibraries(fetchedLibs);
       setLoading(false);
+
+      // Sync any pending offline actions
+      syncPendingActions();
     };
 
     fetchData();
-  }, [user, deriveTags]);
+  }, [user, deriveTags, syncPendingActions]);
 
   const addNote = useCallback(async (note: Omit<Note, 'id' | 'createdAt' | 'updatedAt'>) => {
+    const tempId = crypto.randomUUID();
+    const now = Date.now();
+    const optimisticNote: Note = {
+      id: tempId,
+      title: note.title,
+      content: note.content,
+      tags: note.tags,
+      libraryId: note.libraryId,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    if (!isOnline()) {
+      addPendingAction({ type: 'create_note', payload: { id: tempId, ...note } });
+      setNotes(prev => {
+        const updated = [optimisticNote, ...prev];
+        deriveTags(updated);
+        cacheNotes(updated);
+        return updated;
+      });
+      return optimisticNote;
+    }
+
     const { data, error } = await supabase.from('notes').insert({
       user_id: user!.id,
       title: note.title,
@@ -117,12 +221,26 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setNotes(prev => {
       const updated = [newNote, ...prev];
       deriveTags(updated);
+      cacheNotes(updated);
       return updated;
     });
     return newNote;
   }, [user, deriveTags]);
 
   const updateNote = useCallback(async (id: string, updates: Partial<Omit<Note, 'id' | 'createdAt'>>) => {
+    // Optimistically update local state
+    setNotes(prev => {
+      const updated = prev.map(n => n.id === id ? { ...n, ...updates, updatedAt: Date.now() } : n);
+      deriveTags(updated);
+      cacheNotes(updated);
+      return updated;
+    });
+
+    if (!isOnline()) {
+      addPendingAction({ type: 'update_note', payload: { id, ...updates } });
+      return;
+    }
+
     const dbUpdates: any = {};
     if (updates.title !== undefined) dbUpdates.title = updates.title;
     if (updates.content !== undefined) dbUpdates.content = updates.content;
@@ -135,18 +253,26 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setNotes(prev => {
       const updated = prev.map(n => n.id === id ? mapNote(data) : n);
       deriveTags(updated);
+      cacheNotes(updated);
       return updated;
     });
   }, [deriveTags]);
 
   const deleteNote = useCallback(async (id: string) => {
-    const { error } = await supabase.from('notes').delete().eq('id', id);
-    if (error) throw error;
     setNotes(prev => {
       const updated = prev.filter(n => n.id !== id);
       deriveTags(updated);
+      cacheNotes(updated);
       return updated;
     });
+
+    if (!isOnline()) {
+      addPendingAction({ type: 'delete_note', payload: { id } });
+      return;
+    }
+
+    const { error } = await supabase.from('notes').delete().eq('id', id);
+    if (error) throw error;
   }, [deriveTags]);
 
   const addLibrary = useCallback(async (name: string, parentId?: string | null) => {
@@ -157,16 +283,27 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }).select().single();
     if (error) throw error;
     const lib = mapLibrary(data);
-    setLibraries(prev => [...prev, lib]);
+    setLibraries(prev => {
+      const updated = [...prev, lib];
+      cacheLibraries(updated);
+      return updated;
+    });
     return lib;
   }, [user]);
 
   const deleteLibrary = useCallback(async (id: string) => {
     const { error } = await supabase.from('libraries').delete().eq('id', id);
     if (error) throw error;
-    setLibraries(prev => prev.filter(l => l.id !== id));
-    // Notes with this library_id will be set to null by DB cascade
-    setNotes(prev => prev.map(n => n.libraryId === id ? { ...n, libraryId: null } : n));
+    setLibraries(prev => {
+      const updated = prev.filter(l => l.id !== id);
+      cacheLibraries(updated);
+      return updated;
+    });
+    setNotes(prev => {
+      const updated = prev.map(n => n.libraryId === id ? { ...n, libraryId: null } : n);
+      cacheNotes(updated);
+      return updated;
+    });
   }, []);
 
   const addTag = useCallback((tag: string) => {
@@ -175,39 +312,31 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const deleteTag = useCallback((tag: string) => {
     setTags(prev => prev.filter(t => t !== tag));
-    // Remove tag from all notes in DB
     notes.filter(n => n.tags.includes(tag)).forEach(n => {
       const newTags = n.tags.filter(t => t !== tag);
       supabase.from('notes').update({ tags: newTags }).eq('id', n.id);
     });
-    setNotes(prev => prev.map(n => ({ ...n, tags: n.tags.filter(t => t !== tag) })));
+    setNotes(prev => {
+      const updated = prev.map(n => ({ ...n, tags: n.tags.filter(t => t !== tag) }));
+      cacheNotes(updated);
+      return updated;
+    });
   }, [notes]);
 
-  const getNotesForLibrary = useCallback((libraryId: string) => {
-    return notes.filter(n => n.libraryId === libraryId);
-  }, [notes]);
-
-  const getChildLibraries = useCallback((parentId: string | null) => {
-    return libraries.filter(l => l.parentId === parentId);
-  }, [libraries]);
+  const getNotesForLibrary = useCallback((libraryId: string) => notes.filter(n => n.libraryId === libraryId), [notes]);
+  const getChildLibraries = useCallback((parentId: string | null) => libraries.filter(l => l.parentId === parentId), [libraries]);
 
   const getLibraryDepth = useCallback((libraryId: string) => {
     let depth = 1;
     let current = libraries.find(l => l.id === libraryId);
-    while (current?.parentId) {
-      depth++;
-      current = libraries.find(l => l.id === current!.parentId);
-    }
+    while (current?.parentId) { depth++; current = libraries.find(l => l.id === current!.parentId); }
     return depth;
   }, [libraries]);
 
   const getLibraryPath = useCallback((libraryId: string) => {
     const path: Library[] = [];
     let current = libraries.find(l => l.id === libraryId);
-    while (current) {
-      path.unshift(current);
-      current = current.parentId ? libraries.find(l => l.id === current!.parentId) : undefined;
-    }
+    while (current) { path.unshift(current); current = current.parentId ? libraries.find(l => l.id === current!.parentId) : undefined; }
     return path;
   }, [libraries]);
 
