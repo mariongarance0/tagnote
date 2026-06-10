@@ -1,6 +1,6 @@
 import { useNotes } from '@/contexts/NotesContext';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, FolderOpen, Trash2, FolderInput } from 'lucide-react';
+import { BookOpen, FolderOpen, Trash2, Move } from 'lucide-react';
 import PageTransition from '@/components/PageTransition';
 import { motion } from 'framer-motion';
 import { useState } from 'react';
@@ -78,7 +78,7 @@ const Libraries = () => {
                     className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground active:opacity-60 transition-colors"
                     title="Move library"
                   >
-                    <FolderInput size={17} />
+                    <Move size={17} />
                   </button>
                   <button
                     onClick={() => setLibToDelete(lib.id)}
