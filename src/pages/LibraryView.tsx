@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useNotes } from '@/contexts/NotesContext';
-import { ArrowLeft, Plus, Check, ChevronRight, BookOpen, FolderOpen, Trash2 } from 'lucide-react';
+import { ArrowLeft, Plus, Check, ChevronRight, BookOpen, FolderOpen, Trash2, FolderInput } from 'lucide-react';
 import NoteCard from '@/components/NoteCard';
 import PageTransition from '@/components/PageTransition';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -15,6 +15,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import MoveLibraryDialog from '@/components/MoveLibraryDialog';
 
 const LibraryView = () => {
   const { id } = useParams<{ id: string }>();
@@ -24,6 +25,7 @@ const LibraryView = () => {
   const [showNewSub, setShowNewSub] = useState(false);
   const [newSubName, setNewSubName] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [showMove, setShowMove] = useState(false);
 
   const library = id ? getLibraryById(id) : undefined;
   const notes = id ? getNotesForLibrary(id) : [];
@@ -67,6 +69,9 @@ const LibraryView = () => {
                 {children.length > 0 && ` · ${children.length} sub-librar${children.length !== 1 ? 'ies' : 'y'}`}
               </p>
             </div>
+            <button onClick={() => setShowMove(true)} className="p-1.5 rounded-lg active:opacity-60 text-muted-foreground hover:text-foreground transition-colors" title="Move library">
+              <FolderInput size={18} />
+            </button>
             <button onClick={() => setConfirmDelete(true)} className="p-1.5 rounded-lg active:opacity-60 text-muted-foreground hover:text-destructive transition-colors">
               <Trash2 size={18} />
             </button>
@@ -204,6 +209,15 @@ const LibraryView = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {id && (
+        <MoveLibraryDialog
+          open={showMove}
+          onOpenChange={setShowMove}
+          libraryId={id}
+          onMoved={() => navigate(-1)}
+        />
+      )}
     </PageTransition>
   );
 };
