@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useNotes } from '@/contexts/NotesContext';
-import { ArrowLeft, Plus, Check, ChevronRight, BookOpen, FolderOpen, Trash2, FolderInput } from 'lucide-react';
+import { ArrowLeft, Plus, Check, ChevronRight, BookOpen, FolderOpen, Trash2, Move } from 'lucide-react';
 import NoteCard from '@/components/NoteCard';
 import PageTransition from '@/components/PageTransition';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -70,7 +70,7 @@ const LibraryView = () => {
               </p>
             </div>
             <button onClick={() => setShowMove(true)} className="p-1.5 rounded-lg active:opacity-60 text-muted-foreground hover:text-foreground transition-colors" title="Move library">
-              <FolderInput size={18} />
+              <Move size={18} />
             </button>
             <button onClick={() => setConfirmDelete(true)} className="p-1.5 rounded-lg active:opacity-60 text-muted-foreground hover:text-destructive transition-colors">
               <Trash2 size={18} />
