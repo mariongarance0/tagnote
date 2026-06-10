@@ -36,6 +36,7 @@ interface NotesContextType extends NotesState {
   updateNote: (id: string, updates: Partial<Omit<Note, 'id' | 'createdAt'>>) => Promise<void>;
   deleteNote: (id: string) => Promise<void>;
   addLibrary: (name: string, parentId?: string | null) => Promise<Library>;
+  moveLibrary: (id: string, newParentId: string | null) => Promise<void>;
   deleteLibrary: (id: string) => Promise<void>;
   addTag: (tag: string) => void;
   deleteTag: (tag: string) => void;
@@ -291,6 +292,29 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return lib;
   }, [user]);
 
+  const moveLibrary = useCallback(async (id: string, newParentId: string | null) => {
+    // Guard against circular moves: newParentId must not be id or a descendant of id
+    const isDescendant = (candidateId: string | null): boolean => {
+      if (candidateId === null) return false;
+      if (candidateId === id) return true;
+      const candidate = libraries.find(l => l.id === candidateId);
+      return candidate ? isDescendant(candidate.parentId) : false;
+    };
+    if (isDescendant(newParentId)) return;
+
+    const { error } = await supabase
+      .from('libraries')
+      .update({ parent_id: newParentId })
+      .eq('id', id);
+    if (error) throw error;
+
+    setLibraries(prev => {
+      const updated = prev.map(l => l.id === id ? { ...l, parentId: newParentId } : l);
+      cacheLibraries(updated);
+      return updated;
+    });
+  }, [libraries]);
+
   const deleteLibrary = useCallback(async (id: string) => {
     const { error } = await supabase.from('libraries').delete().eq('id', id);
     if (error) throw error;
@@ -351,7 +375,7 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   return (
     <NotesContext.Provider value={{
       notes, libraries, tags, loading,
-      addNote, updateNote, deleteNote, addLibrary, deleteLibrary,
+      addNote, updateNote, deleteNote, addLibrary, moveLibrary, deleteLibrary,
       addTag, deleteTag, getNotesForLibrary, getChildLibraries, getLibraryDepth, getNotesForTags, getNoteById, getLibraryById, getLibraryPath,
     }}>
       {children}
