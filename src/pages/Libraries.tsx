@@ -1,6 +1,6 @@
 import { useNotes } from '@/contexts/NotesContext';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, FolderOpen, Trash2 } from 'lucide-react';
+import { BookOpen, FolderOpen, Trash2, FolderInput } from 'lucide-react';
 import PageTransition from '@/components/PageTransition';
 import { motion } from 'framer-motion';
 import { useState } from 'react';
@@ -14,11 +14,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import MoveLibraryDialog from '@/components/MoveLibraryDialog';
 
 const Libraries = () => {
   const { getChildLibraries, getNotesForLibrary, deleteLibrary } = useNotes();
   const navigate = useNavigate();
   const [libToDelete, setLibToDelete] = useState<string | null>(null);
+  const [libToMove, setLibToMove] = useState<string | null>(null);
 
   // Only show root-level libraries
   const rootLibraries = getChildLibraries(null);
@@ -72,6 +74,13 @@ const Libraries = () => {
                     </div>
                   </button>
                   <button
+                    onClick={() => setLibToMove(lib.id)}
+                    className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground active:opacity-60 transition-colors"
+                    title="Move library"
+                  >
+                    <FolderInput size={17} />
+                  </button>
+                  <button
                     onClick={() => setLibToDelete(lib.id)}
                     className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive active:opacity-60 transition-colors"
                   >
@@ -101,6 +110,14 @@ const Libraries = () => {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+
+          {libToMove && (
+            <MoveLibraryDialog
+              open={!!libToMove}
+              onOpenChange={open => !open && setLibToMove(null)}
+              libraryId={libToMove}
+            />
+          )}
           </>
         )}
       </div>
